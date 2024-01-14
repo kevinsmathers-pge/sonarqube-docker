@@ -1,0 +1,9 @@
+*** etc/wgetrc	2024/01/10 21:58:50	1.1
+--- etc/wgetrc	2024/01/10 21:59:30
+***************
+*** 136,138 ****
+--- 136,139 ----
+
+  # Tune HTTPS security (auto, SSLv2, SSLv3, TLSv1, PFS)
+  #secureprotocol = auto
++ ca_certificate = /etc/ssl/certs/ca-certificates.crt

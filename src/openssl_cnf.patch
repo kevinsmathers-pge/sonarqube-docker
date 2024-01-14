@@ -1,0 +1,10 @@
+*** ./etc/ssl/openssl.cnf	2024/01/09 17:03:44	1.1
+--- ./etc/ssl/openssl.cnf	2024/01/09 17:03:51
+***************
+*** 394,397 ****
+--- 394,398 ----
+  system_default = system_default_sect
+
+  [system_default_sect]
++ Options = UnsafeLegacyRenegotiation
+  CipherString = DEFAULT:@SECLEVEL=2
