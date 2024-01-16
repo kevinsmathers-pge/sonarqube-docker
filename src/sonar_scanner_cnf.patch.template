@@ -1,0 +1,14 @@
+*** opt/sonar-scanner/conf/sonar-scanner.properties    2024/01/15 20:46:48     1.1
+--- opt/sonar-scanner/conf/sonar-scanner.properties    2024/01/15 20:47:03
+***************
+*** 3,11 ****
+
+  #----- Default SonarQube server
+  #sonar.host.url=http://localhost:9000
++ sonar.projectKey=my_project
++ sonar.login=@SONAR_TOKEN@
++ sonar.host.url=http://localhost:9000
+
+  #----- Default source code encoding
+  #sonar.sourceEncoding=UTF-8
+--- 3,8 ----
