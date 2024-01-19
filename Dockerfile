@@ -31,14 +31,14 @@ RUN wget -q https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sona
 RUN unzip -q /opt/sonar-scanner-cli*zip -d /opt && \
     rm -f /opt/sonar-scanner-cli*zip && \
     ln -sf /opt/sonar-scanner-* /opt/sonar-scanner && \
-    cp src/sonar_scanner_cf.patch.template /tmp && \
+    cp src/sonar_scanner_cnf.patch.template /tmp && \
     cp src/fill-template.py /tmp && \
-    cp src/scanner-setup.sh /opt
+    cp src/sonarscan.sh /opt && \
+    cp src/entrypoint.sh /opt
 
 # Create sonarqube user
 RUN useradd sonarqube -s /usr/bin/bash -d /opt/sonarqube && \
-    chown -R sonarqube.sonarqube /opt/sonarqube-* && \
-    chown -R sonarqube.sonarqube /opt/sonar-scanner-*
+    chown -R sonarqube.sonarqube /opt
 
 # Install manual debugging utilities
 RUN apt install -y sudo vim rcs && \
@@ -52,7 +52,6 @@ RUN pip install dist/*whl
 USER sonarqube
 ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/CombinedCA.pem
 WORKDIR /opt
-RUN 
 #RUN mv /opt/sonar-scanner-4.6.2.2472-linux /opt/sonar-scanner-dir
 #RUN rm -rf /opt/sonar-scanner-dir/jre
 #RUN ln -s /usr/lib/jvm/java-11-openjdk/jre/ /opt/sonar-scanner-dir/jre

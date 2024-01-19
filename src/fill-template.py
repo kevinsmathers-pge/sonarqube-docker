@@ -46,6 +46,10 @@ def find_replace_variables(body : str):
             if vartype == "secret":
                 varname, varprop = varname.split(".")
                 varvalue = get_secret(varname)[varprop]
+            elif vartype == "env":
+                varvalue = os.environ.get(varname)
+                if varvalue is None:
+                    errors.error(f"Value error: Unable to get env '{varname}'")
             else:
                 errors.error(f"Unknown variable type: '{vartype}'")
                 varvalue = None

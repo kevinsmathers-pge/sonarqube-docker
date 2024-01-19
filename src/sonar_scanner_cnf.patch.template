@@ -6,7 +6,7 @@
   
   #----- Default SonarQube server
   #sonar.host.url=http://localhost:9000
-+ sonar.projectKey=my_project
++ sonar.projectKey=project_key_not_set
 + sonar.login=@secret:local-sonarqube-token.sonartoken@
 + sonar.host.url=http://localhost:9000
   
