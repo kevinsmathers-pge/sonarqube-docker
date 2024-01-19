@@ -30,7 +30,10 @@ RUN unzip -q /opt/sonarqube*.zip -d /opt && \
 RUN wget -q https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip -P /opt
 RUN unzip -q /opt/sonar-scanner-cli*zip -d /opt && \
     rm -f /opt/sonar-scanner-cli*zip && \
-    ln -sf /opt/sonar-scanner-* /opt/sonar-scanner
+    ln -sf /opt/sonar-scanner-* /opt/sonar-scanner && \
+    cp src/sonar_scanner_cf.patch.template /tmp && \
+    cp src/fill-template.py /tmp && \
+    cp src/scanner-setup.sh /opt
 
 # Create sonarqube user
 RUN useradd sonarqube -s /usr/bin/bash -d /opt/sonarqube && \
@@ -42,8 +45,14 @@ RUN apt install -y sudo vim rcs && \
     apt-get clean && \
     echo "sonarqube ALL=NOPASSWD: ALL" >>/etc/sudoers
 
+# Install python libraries
+COPY dist dist
+RUN pip install dist/*whl
+
 USER sonarqube
+ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/CombinedCA.pem
 WORKDIR /opt
+RUN 
 #RUN mv /opt/sonar-scanner-4.6.2.2472-linux /opt/sonar-scanner-dir
 #RUN rm -rf /opt/sonar-scanner-dir/jre
 #RUN ln -s /usr/lib/jvm/java-11-openjdk/jre/ /opt/sonar-scanner-dir/jre
