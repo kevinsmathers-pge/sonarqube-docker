@@ -1,7 +1,7 @@
 import sys
-import jupyter_aws as jaws
-from jupyter_aws.known_secret import KnownSecret, SecretId
-from foundrysmith.error_report import ErrorReport
+# import jupyter_aws as jaws
+# from jupyter_aws.known_secret import KnownSecret, SecretId
+# from foundrysmith.error_report import ErrorReport
 import os
 import re
 import json
@@ -11,7 +11,43 @@ from io import StringIO, IOBase
 import sys
 import re
 from typing import List, Union
+import sys
 
+class ErrorReport:
+    def __init__(self):
+        self.error_count = 0
+
+    def error(self, msg):
+        print(msg, file=sys.stderr)
+        self.error_count += 1
+
+    def exit_on_error(self):
+        if self.error_count>0:
+            print("Exit on error", file=sys.stderr)
+            sys.exit(1)
+
+class SecretId:
+    def __init__(self, name):
+        self.name = name
+
+    @classmethod
+    def by_value(cls, name):
+        return SecretId(name)
+
+class KnownSecret:
+    def __init__(self):
+        pass
+    def get_secret(self, id):
+        return { "name": id.name, "sonartoken": f"!!!sonartoken-{id.name}!!!" }
+
+class Arglist:
+    def __init__(self, args):
+        self.args = args
+
+    def shift(self):
+        arg = self.args[0]
+        self.args = self.args[1:]
+        return arg
 
 errors = ErrorReport()
 
@@ -82,7 +118,7 @@ def get_setting(varname : str) -> str:
                     print(f"Setting {var}={val}")
                     settings[var] = val
     return settings[varname]
-    
+
 
 def find_replace_variables(body : str) -> str:
     """- Interpolates variables in the body of a document
@@ -95,7 +131,7 @@ def find_replace_variables(body : str) -> str:
 
     The <varname> part must match a well-known SecretID value to use the 'secret' type.   For
     other types the <varname> will match the shell variable name.
-    
+
     Args:
         body :str: The document body to be interpolated.
     """
@@ -128,7 +164,7 @@ class Fpos:
     def __init__(self, data : Union[str, IOBase, List[str]]):
         """ - Provides a windowed view of an input stream
         Args:
-        data :Union[str, IOBase, List[str]]: A file path or derivative class of IOBase to read from, or a list of lines 
+        data :Union[str, IOBase, List[str]]: A file path or derivative class of IOBase to read from, or a list of lines
         """
         if type(data) is str:
             with open(data, "rt") as f:
@@ -142,20 +178,20 @@ class Fpos:
         self.lines = lines
         self.cpos = 0
         self.rpos = 0
-        
+
     @property
     def v(self):
         """- Returns the current row and column view of the stream"""
         #print(self.rpos,self.cpos,self.lines[self.rpos][self.cpos:])
         return self.lines[self.rpos][self.cpos:]
-    
+
     @property
     def eof(self):
         """- Returns true if the row is past the end of the stream"""
         if self.rpos >= len(self.lines):
             return True
         return False
-    
+
     def skip(self, n):
         """- Moves the cursor forward
         Args:
@@ -168,9 +204,9 @@ class Fpos:
             self.cpos = 0
             self.rpos += 1
 
-class PreprocessorLexer(Lexer):    
+class PreprocessorLexer(Lexer):
     """Tokenizes an input file returning TEXT tokens for unrecognized text, and preprocessor
-    tokens for C preprocessor instructions.  Whitespace is ignored by the lexical analyzer except 
+    tokens for C preprocessor instructions.  Whitespace is ignored by the lexical analyzer except
     that it resets the state to rules0"""
     rules0 = {
         "INCLUDE": r"^#[ ]*include",
@@ -178,7 +214,7 @@ class PreprocessorLexer(Lexer):
         "IFDEF": r"^#[ ]*ifdef",
         "IF": r"^#[ ]*if",
         "ELSE": r"^#[ ]*else",
-        "ENDIF": r"^#[ ]*endif",  
+        "ENDIF": r"^#[ ]*endif",
     }
     rules0priority = [
         'INCLUDE', 'IFDEF', 'IF', 'ENDIF', 'ELSE', 'DEFINE'
@@ -198,7 +234,7 @@ class PreprocessorLexer(Lexer):
     rules1priority = [
         'SPACE', 'SYMBOL', 'COMP', 'UNARY', 'ASSIGN', 'DEFINED', '(', ')', 'STRING', 'EOL'
     ]
-    
+
     def __init__(self, lexer_conf=None):
         """- Construct PreprocessorLexer"""
         pass
@@ -225,7 +261,7 @@ class PreprocessorLexer(Lexer):
                     fp.skip(len(token.value))
                     return token
             raise TypeError(f"Invalid token at {fp.v}")
-            
+
     def lex(self, fp):
         """- Generates tokens until EOF.  Whitespace tokens are skipped.
         Args:
@@ -243,62 +279,82 @@ class PreprocessorLexer(Lexer):
 class Instruction:
     def __init__(self, opcode, arg1=None, arg2=None):
         self.op = [opcode, arg1, arg2]
-        
+
+    def __repr__(self) -> str:
+        opcode = self.opcode
+        arg1 = self.arg1
+        arg2 = self.arg2
+        if arg1:
+            if arg2:
+                return f"{opcode}({arg1},{arg2})"
+            else:
+                return f"{opcode}({arg1})"
+        else:
+            return f"{opcode}"
+
+
     @property
     def opcode(self):
         return self.op[0]
-    
+
     @property
     def arg1(self):
         return self.op[1]
-    
+
     @property
     def arg2(self):
         return self.op[2]
-    
+
 class PreprocessorVM:
     def __init__(self, env=None):
         if env is None:
             env = {}
         self.stack = []
         self.vars = env
-        self.progmem = { 'main': [] }
-        self.pc = ('main', 0)
+        self.progmem = [ Instruction('LABEL', 'main') ]
+        self.pc = 0
         self.seg_count = 0
         self.output = []
         self.running = False
-        
-    def prog(self, symbol, instr):
-        if symbol not in self.progmem:
-            self.progmem[symbol] = []
-        self.progmem[symbol].extend(instr)
-        
+        self.labels = {}
+        self.scan_labels()
+
+    def scan_labels(self):
+        for pc,i in enumerate(self.progmem):
+            if i.opcode == 'LABEL':
+                self.labels[i.arg1] = pc
+
+    def prog(self, instr):
+        self.progmem.extend(instr)
+        self.scan_labels()
+
     def gensym(self):
         self.seg_count += 1
         return f"SEG_{self.seg_count:03d}"
-    
+
     def push(self, v):
         self.stack.append(v)
-        
+
     def pop(self):
         v = self.stack[-1]
         del self.stack[-1]
         return v
-    
+
     def interpolate(self, body):
         for v in self.vars:
             body = body.replace(v, self.vars[v])
         return body
-    
+
     def execute1(self):
         if not self.running: return
-        seg,pc = self.pc
-        instr = self.progmem[seg][pc]
+        pc = self.pc
+        instr = self.progmem[pc]
+        #print(pc, instr)
         opcode = instr.opcode
         arg1 = instr.arg1
         arg2 = instr.arg2
         pc += 1
-        self.pc = (seg, pc)
+        self.pc = pc
         if opcode == 'EMIT':
             self.output.append(self.interpolate(arg1))
         elif opcode == 'GET':
@@ -334,13 +390,13 @@ class PreprocessorVM:
             cond = self.pop()
             sym = arg1
             if cond:
-                self.pc = (sym, 0)
+                self.pc = self.labels[lbl]
         elif opcode == 'JMP':
-            sym = arg1
-            self.pc = (sym, 0)
+            lbl = arg1
+            self.pc = self.labels[lbl]
         elif opcode == 'SET':
             var = arg1
-            val = arg2
+            val = self.pop()
             self.vars[var] = val
         elif opcode == 'INCLUDE':
             raise NotImplementedError("Not implemented INCLUDE")
@@ -349,14 +405,20 @@ class PreprocessorVM:
         elif opcode == 'EXISTS':
             sym = arg1
             self.push(sym in self.vars)
+        elif opcode == 'LABEL':
+            lbl = arg1
+            #print(lbl)
+        elif opcode == 'FATAL':
+            msg = arg1
+            print(msg, file=sys.stderr)
+            sys.exit(1)
 
-            
     def execute(self):
-        self.pc = ('main',0)
+        self.pc = self.labels['main']
         self.running = True
         while (self.running):
             try:
-                self.execute1()  
+                self.execute1()
             except Exception as e:
                 print(self.pc, str(e))
                 raise e
@@ -364,32 +426,34 @@ class PreprocessorVM:
 
 # Syntax definition for the preprocessor
 preprocessor_bnf = r"""
-start: anyitem*
+start: block
 
-anyitem: body 
-    | condbody 
-    | include 
+block: anyitem*
+
+anyitem: body
+    | condbody
+    | include
     | define
 
 ?include: INCLUDE STRING -> include
-    
+
 define: DEFINE SYMBOL expr? -> setsymbol
 
-condbody: IF bexpr start ENDIF -> condbody
-    | IF bexpr start ELSE start ENDIF -> condbody
-    | IFDEF SYMBOL start ENDIF -> condbody2
-    | IFDEF SYMBOL start ELSE start ENDIF -> condbody2
+condbody: IF bexpr block ENDIF -> condbody
+    | IF bexpr block ELSE block ENDIF -> condbody
+    | IFDEF SYMBOL block ENDIF -> condbody2
+    | IFDEF SYMBOL block ELSE block ENDIF -> condbody2
 
 body: TEXT+
-    
+
 bexpr: expr COMP expr -> expr2
     | UNARY bexpr -> expr1
     | DEFINED "(" SYMBOL ")" -> expr1
-    
+
 expr: SYMBOL -> eval1
     | STRING -> eval1
-    
-%declare TEXT IF IFDEF ELSE ENDIF INCLUDE DEFINE SYMBOL ASSIGN STRING COMP UNARY DEFINED 
+
+%declare TEXT IF IFDEF ELSE ENDIF INCLUDE DEFINE SYMBOL ASSIGN STRING COMP UNARY DEFINED
 """
 
 
@@ -403,92 +467,110 @@ def unwrap_str(s):
 
 # Parser tree transformer to output file (as a list of lines)
 class ParsePreprocessor(Transformer):
-    def __init__(self, environ=None):
-        if environ is None:
-            environ = {}
-        self.vars = environ
-        
+    def __init__(self, vm : PreprocessorVM):
+        self.vm = vm
+
     def start(self, v):
-        result = []
-        for vi in v:
-            result.extend(vi)
-        print(f"node start {result}", file=sys.stderr)
+        block = v[0]
+        result = block + [
+            Instruction('HALT')
+        ]
         return result
-    
+
+    def block(self, v):
+        result = []
+        for i in v:
+            result.extend(i)
+        #print(f"node start {result}", file=sys.stderr)
+        return result
+
     def anyitem(self, v):
-        print(f"node anyitem {v[0]}", file=sys.stderr)
+        #print(f"node anyitem {v[0]}", file=sys.stderr)
         return v[0]
-    
+
     def setsymbol(self, v):
-        symbol = v[1].value
+        var = v[1].value
         value = True
         if len(v) > 2:
             value = v[2]
-        
-        print(f"node setsymbol  {symbol} = {value}", file=sys.stderr)
-        self.vars[symbol] = value
-        return [ lambda: self.vars.__setitem__(symbol, value) ]
-    
-    def body(self, v):
-        result = [ Instruction('EMIT', x.value) for x in v ]
-        print(f"node body  {result}", file=sys.stderr)
-        return result
-    
-    def execute(self, v):
-        result = []
-        for i in v:
-            if type(i) is callable:
-                result.extend(i())
-            else:
-                result.append(i)
+
+        result = value + [
+            Instruction('SET', var)
+        ]
+
+        #print(f"node setsymbol  {result}", file=sys.stderr)
         return result
 
-    def condbody(self, v):
-        bexpr = v[1]
-        if bexpr:
-            print(f"* node condbody True -> {v[2]}", file=sys.stderr)
-            result = self.execute(v[2])
-        else:
-            result = []
-            if len(v)==5:
-                print(f"* node condbody False -> {v[4]}", file=sys.stderr)
-                result = self.execute(v[4])
-            
-        print(f"node condbody -> {result}", file=sys.stderr)   
+    def body(self, v):
+        result = [ Instruction('EMIT', x.value) for x in v ]
+        #print(f"node body  {result}", file=sys.stderr)
         return result
-    
+
+    # def execute(self, v):
+    #     result = []
+    #     for i in v:
+    #         if type(i) is callable:
+    #             result.extend(i())
+    #         else:
+    #             result.append(i)
+    #     return result
+
+    def condbody(self, v):
+        #print(f"* node condbody {v}")
+        bexpr = v[1]
+        truestart = v[2]
+        falsestart = v[4] if len(v)==6 else []
+
+        # if bcond truestart else falsestart
+        truecase = self.vm.gensym()
+        xcontinue = self.vm.gensym()
+        result = bexpr + [
+            Instruction('IFJMP', truecase)
+        ] + falsestart + [
+            Instruction('JMP', xcontinue),
+            Instruction('LABEL', truecase)
+        ] + truestart + [
+            Instruction('LABEL', xcontinue)
+        ]
+
+        #print(f"node condbody -> {result}", file=sys.stderr)
+        return result
+
     def condbody2(self, v):
         sym = v[1].value
-        
+        truestart = v[2]
+        falsestart = v[4] if len(v)==5 else []
+
         # ifdef sym block1 else block2
-        bexpr = [ Instruction('CONST', sym), 
-                  Instruction('EVAL1', 'defined', sym) ]
-        
-        var = self.vars.get(sym, '')
-        print(f"node condbody2 vars[{sym}] is {var}", file=sys.stderr)
-        if var != '' and var != 0:
-            print(f"* node condbody2 True -> {v}", file=sys.stderr)
-            result = v[2]
-        else:
-            result = []
-            if len(v)==5:
-                result = v[4]
-        print(f"node condbody2 -> {result}", file=sys.stderr)
-        assert(type(result) is list)
-        for r in result:
-            assert(type(r) is str)
+        truecase = self.vm.gensym()
+        xcontinue = self.vm.gensym()
+
+        result = [
+            Instruction('CONST', sym),
+            Instruction('EVAL1', 'defined'),
+            Instruction('IFJMP', truecase)
+        ] + falsestart + [
+            Instruction('JMP', xcontinue),
+            Instruction('LABEL', truecase)
+        ] + truestart + [
+            Instruction('LABEL', xcontinue)
+        ]
+
+        #print(f"node condbody2 -> {result}", file=sys.stderr)
         return result
-    
+
     def eval1(self, v):
-        arg1 = v[1].value
+        #print(f"node eval1 {v}")
+        cond = v[0].value
         if v[0].type == 'SYMBOL':
             opcode = 'GET'
         elif v[0].type == 'STRING':
             opcode = 'CONST'
-        value = [ Instruction(opcode, arg1) ]
-        print(f"node eval1 {value}", file=sys.stderr)
+            cond = unwrap_str(cond)
+        value = [ Instruction(opcode, cond) ]
+        #print(f"node eval1 {value}", file=sys.stderr)
         return value
-    
+
     def expr1(self, v):
         if v[0].type == 'UNARY':
             # ! a
@@ -499,15 +581,15 @@ class ParsePreprocessor(Transformer):
             a = v[2]
             arg1 = 'defined'
         result = a + [ Instruction('EVAL1', arg1) ]
-        print(f"node expr1 {result}", file=sys.stderr)
+        #print(f"node expr1 {result}", file=sys.stderr)
         return result
-           
+
     def expr2(self, v):
         a = v[0]
         cmp = v[1].value
         b = v[2]
         result = b + a + [ Instruction('EVAL2', cmp) ]
-        print(f"node expr2 {result}", file=sys.stderr)
+        #print(f"node expr2 {result}", file=sys.stderr)
         return result
 
 
@@ -517,27 +599,29 @@ def preprocess(fp : Fpos, environ : dict={}) -> str:
         fp :Fpos: The file to be read from
         environ :Dict[str, str]: The initial environment defines
     """
-    # Lark look-ahead left-reduce parser
-    parser = Lark(preprocessor_bnf, parser='lalr', lexer=PreprocessorLexer)  
+    # Generate preprocessor script from input and execute the script in a VM
+    vm = PreprocessorVM(environ)
+    parser = Lark(preprocessor_bnf, parser='lalr', lexer=PreprocessorLexer)
     tree = parser.parse(fp)
     #print(tree)
-    res = ParsePreprocessor(environ).transform(tree)
-    return "".join(res)
+    vm.prog(ParsePreprocessor(vm).transform(tree))
+    vm.execute()
+    return "".join(vm.output)
 
 
-def main(args : jaws.Arglist):
+def main(args : Arglist):
     app = args.shift()
     print("app", app)
     #process options
     env = {}
     opt = args.shift()
-    print("opt", opt)
-    while opt == "/D":
+    # print("opt", opt)
+    while opt == "-D":
         var,val = args.shift().split('=', 1)
-        print("var,val", var,val)
+        #print("var,val", var,val)
         env[var] = val
         opt = args.shift()
-        print(opt)
+        #print(opt)
     template_file = opt
     print(template_file)
     if not os.path.isfile(template_file):
@@ -561,4 +645,4 @@ def main(args : jaws.Arglist):
         print(body)
 
 if __name__ == "__main__":
-    main(jaws.Arglist(sys.argv))
+    main(Arglist(sys.argv))
