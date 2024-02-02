@@ -14,8 +14,8 @@
   # User credentials.
   # Permissions to create tables, indices and triggers must be granted to JDBC user.
   # The schema must be created first.
-! sonar.jdbc.username=sonarqube
-! sonar.jdbc.password=hello.c
+! sonar.jdbc.username=@secret:local-sonarqube-database.username@
+! sonar.jdbc.password=@secret:local-sonarqube-database.password@
 
   #----- Embedded Database (default)
   # H2 embedded database server listening port, defaults to 9092

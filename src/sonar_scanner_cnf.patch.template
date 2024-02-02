@@ -1,14 +1,23 @@
-*** sonar-scanner.properties    2024/01/18 16:21:23     1.1
---- sonar-scanner.properties    2024/01/18 16:21:39
+#if ENV=="dev"
+#  define SECRET "local-sonarqube-token"
+#  define SERVER "http://localhost:9000"
+#else
+#  define SECRET "sonarqube-token"
+#  define SERVER "https://sonarqube.io.pge.com"
+#endif
+*** sonar-scanner.properties    2024/01/19 23:33:02     1.1
+--- sonar-scanner.properties    2024/01/19 23:33:16
 ***************
 *** 3,8 ****
---- 3,11 ----
+--- 3,13 ----
   
   #----- Default SonarQube server
   #sonar.host.url=http://localhost:9000
 + sonar.projectKey=project_key_not_set
-+ sonar.login=@secret:local-sonarqube-token.sonartoken@
-+ sonar.host.url=http://localhost:9000
++ sonar.token=@secret:SECRET.sonartoken@
++ sonar.host.url=SERVER
++ sonar.organization=Foundry
++ sonar.exclusions=**/*.java
   
   #----- Default source code encoding
   #sonar.sourceEncoding=UTF-8

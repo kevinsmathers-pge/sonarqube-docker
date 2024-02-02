@@ -1,0 +1,22 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: oamodel-2022-kube-22
+  namespace: tline-@setting.sh:ENV@
+spec:
+  schedule: "30 13 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: @setting.sh:PROJECT@
+            image: "@setting.sh:AWS_ACCOUNT@.dkr.ecr.us-west-2.amazonaws.com/@setting.sh:PROJECT@:@setting.sh:VERSION@"
+            imagePullPolicy: Always
+            command: ["bash"]
+            args:    ["/opt/entrypoint.sh", "2", "3"]
+          dnsPolicy: ClusterFirst
+          restartPolicy: Never
+          nodeSelector:
+            nodetype: general-purpose

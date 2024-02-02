@@ -14,15 +14,15 @@ scan() {
     CODEREPO=$1
     PROJECT_NAME=`basename "$CODEREPO"`
     fsm clone "$CODEREPO"
-    cd /opt/sonarqube/git-helper/$PROJECT_NAME
-    /opt/sonar-scanner/bin/sonar-scanner -D sonar.projectKey=$PROJECT_NAME
+    projdir=`echo $PROJECT_NAME | sed 's/ /-/g'`
+    cd /opt/sonarqube/git-helper/"$projdir"
+    /opt/sonar-scanner/bin/sonar-scanner -D sonar.projectKey="ank:$projdir"
 }
 
 while [ $# -gt 0 ]; do
-   echo $1
-   if [ $1 = "setup" ] ; then setup
-   else scan $1
+   echo "$1"
+   if [ "$1" = "setup" ] ; then setup
+   else scan "$1"
    fi
    shift
 done
-

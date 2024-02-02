@@ -19,12 +19,13 @@ RUN update-ca-certificates
 RUN patch -p0 -d/ <src/openssl_cnf.patch && \
     patch -p0 -d/ <src/wgetrc.patch
 
-# Fetch & install sonarqube
+#if ENV=="dev"
+# Fetch & install sonarqube (development)
 RUN wget -q https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-10.3.0.82913.zip -P /opt
 RUN unzip -q /opt/sonarqube*.zip -d /opt && \
     rm -f /opt/sonarqube*.zip && \
-    ln -sf /opt/sonarqube-* /opt/sonarqube && \
-    patch -p0 -d/ <src/sonarqube_cnf.patch
+    ln -sf /opt/sonarqube-* /opt/sonarqube
+#endif
 
 # Fetch & install sonar-scanner-cli
 RUN wget -q https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip -P /opt
@@ -32,22 +33,26 @@ RUN unzip -q /opt/sonar-scanner-cli*zip -d /opt && \
     rm -f /opt/sonar-scanner-cli*zip && \
     ln -sf /opt/sonar-scanner-* /opt/sonar-scanner && \
     cp src/sonar_scanner_cnf.patch.template /tmp && \
+    cp src/sonarqube_cnf.patch.template /tmp && \
     cp src/fill-template.py /tmp && \
     cp src/sonarscan.sh /opt && \
     cp src/entrypoint.sh /opt
+
+
+# Install python libraries
+COPY dist dist
+RUN pip install dist/*whl
 
 # Create sonarqube user
 RUN useradd sonarqube -s /usr/bin/bash -d /opt/sonarqube && \
     chown -R sonarqube.sonarqube /opt
 
-# Install manual debugging utilities
+#if ENV=="dev"
+# Install manual debugging utilities (development)
 RUN apt install -y sudo vim rcs && \
     apt-get clean && \
     echo "sonarqube ALL=NOPASSWD: ALL" >>/etc/sudoers
-
-# Install python libraries
-COPY dist dist
-RUN pip install dist/*whl
+#endif
 
 USER sonarqube
 ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/CombinedCA.pem
